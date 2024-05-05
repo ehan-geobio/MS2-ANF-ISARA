@@ -1,0 +1,200 @@
+---
+title: "ISARA Uncertainty Calc User vNov 03 2023"
+author: "Eunah Han"
+date: "2023-11-03"
+output: html_document
+---
+
+This document includes R code of %V-nitrognease calculation prompt in Han's Dissertation Chapter 3. The prompt result is based on three fuctions, Functions 1-3, written in this file. A user of this file do not need to use the Functions 1-3 and just follow the prompt questions. Using the functions in this document do not need any R library installations. See Supplementary Methods of Han's Dissertation Chapter 3 for the detailed calculation method.
+
+## Function 1. percV_uncertainty
+
+This function calculates uncertainty of %V-nitrogenase of head space sample from a single ARA incubation jar. The input variables are described below. The variables Var 3 to 9 are a list of numeric numbers that are chosen in a normally distributed values. This normlally distributed population was defined with empirically measured AVE and SD values of this study, Haynes et al. (2022), Zhang et al. (2016). See Supplementary Tables and a separate txt file in GitHub for the details of the inpuut variables.
+  Var 1. n: how many numbers will be chosen from a list of an input variable. This number determines the number of total iterations of Monte Carlo calculation in this function, which is n^(the number of input variables, 7)
+  Var 2. ID: sample ID
+  Var 3. le_Mo: a list of the epsilon values (13C/12C fractionation) of Mo-nitrogenase
+  Var 4. le_V: a list of the epsilon values (13C/12C fractionation) of V-nitrogenase
+  Var 5. ld13C_acetylene: a list of the d13C values of acetylene gas
+  Var 6. lconc_totet: a list of the total ethylene concentration values from an ARA incubation jar
+  Var 7. ld13C_totet: a list of the d13C values of ethylene gas from an ARA incubation jar
+  Var 8. lconc_bget: a list of the ethylene concentration in a bag of acetylene gas
+  Var 9. ld13C_bget: a list of the d13C values of ethylene in a bag of acetylene gas
+
+The output variables are:
+  Var 10. MC_AVE: an average value of a list of %V-nitrogenase values calculated using Vars 1-9 
+  Var 11. MC_SD: a SD value of a list of %V-nitrogenase values calculated using Vars 1-9
+
+Var 11 is the "uncertainty of %V-nitrogenase" of a head space sample in the paper.
+
+```{r}
+percV_uncertainty<-function(n, ID, le_Mo, le_V, ld13C_acetylene, lconc_totet, ld13C_totet, lconc_bget, ld13C_bget){
+
+  MC_data<-rep(NA, length=(n^3))
+  for(i1 in seq(from=1, to=n, by=1)){
+    for(i2 in seq(from=1, to=n, by=1)){
+      for(i3 in seq(from=1, to=n, by=1)){
+        for(i4 in seq(from=1, to=n, by=1)){
+          d13C_totet<-ld13C_totet[i1]
+          conc_bget<-lconc_bget[i2]
+          d13C_bget<-ld13C_bget[i3]
+          conc_totet<-lconc_totet[i4]
+          
+          conc_bnf<-conc_totet-conc_bget
+          d13C_bnf<-((conc_totet*d13C_totet)-(conc_bget*d13C_bget))/conc_bnf
+          
+          ith<-i3+((i2-1)*n)+((i1-1)*((n)^2))
+          MC_data[ith]<-d13C_bnf          
+        }}}}
+  MC_AVE<-mean(MC_data)
+  MC_SD<-sd(MC_data)
+  
+  ld13C_bnf<-rnorm(n, mean=MC_AVE, sd=MC_SD)
+  MC_AVE<-NA
+  MC_SD<-NA
+  
+  MC_data<-rep(NA, length=(n^4))
+  for(i1 in seq(from=1, to=n, by=1)){
+    for(i2 in seq(from=1, to=n, by=1)){
+      for(i3 in seq(from=1, to=n, by=1)){
+        for(i4 in seq(from=1, to=n, by=1)){
+          e_Mo<-le_Mo[i1]
+          e_V<-le_V[i2]
+          d13C_acetylene<-ld13C_acetylene[i3]
+          d13C_bnf<-ld13C_bnf[i4]
+          ith<-i4+((i3-1)*n)+((i2-1)*((n)^2))+((i1-1)*((n)^3))
+          
+          percV_ith<-((e_Mo-(d13C_acetylene-d13C_bnf))/(e_Mo-e_V))*100
+          MC_data[ith]<-percV_ith
+        }}}}
+  MC_AVE<-round(mean(MC_data),1)
+  MC_SD<-round(sd(MC_data),1)
+  
+  figures(n, conc_totet, ld13C_totet, lconc_bget, ld13C_bget, ld13C_bnf, le_Mo, le_V, ld13C_acetylene, ID)
+  
+  return(c(MC_AVE,MC_SD))
+}
+```
+
+## Function 2. percV_uncertainty
+
+This function calculates the uncertainty values of %V-nitrogenase for head space samples from multiple ARA incubation jars using Function 1. percV_uncertainty above.
+
+The input variables are:
+  Var 1. n: same to Var 1. n described for Function 1
+  Var 12. rand_exist: Yes or No of if lists of randomly generated numbers for the input variables for Fuction 1 exist  and if a user wants to use the lists (Yes) or wants to generate new lists (No)
+
+
+```{r}
+multiple_uncertainty<-function(n, rand_exist){
+  cat("\n\n========== in Progress ==========\n")
+  
+  if(rand_exist=="Yes"){
+    minput_rand<-read.table(file='input_rand.txt',header=TRUE, sep="\t")
+    lconc_bget<-minput_rand$lconc_bget
+    ld13C_acetylene<-minput_rand$ld13C_acetylene
+    le_Mo<-minput_rand$le_Mo
+    le_V<-minput_rand$le_V
+    }
+  else{
+    conc_bget<-c(rep(2,3),rep(2.4,4),rep(2.1,2))
+    lconc_bget<-rnorm(n,mean=mean(conc_bget), sd=sd(conc_bget))
+    ld13C_acetylene<-rnorm(n, mean=14.9, sd=0.9)
+    le_Mo<-rnorm(n, mean=13.6, sd=0.5)
+    le_V<-rnorm(n, mean=7.6, sd=0.6)
+    
+    minput_rand<-cbind(lconc_bget,ld13C_acetylene,le_Mo,le_V)
+    write.table(minput_rand, file='input_rand.txt', sep="\t", col.names=NA)
+  }
+  
+  # d13C_bnf
+  data<-read.table(file='input_data.txt', header=TRUE, sep="")
+  row.names(data)<-data[,1]
+  data<-subset(data, select=-ID_SAMPLE)
+  x<-dim(data)[1]
+  y<-dim(data)[2]
+  
+  for(i in seq(from=1, to=x, by=1)){
+    d13C_totet_AVE<-data$d13C_totet_AVE[i]
+    d13C_totet_SD<-data$d13C_totet_SD[i]
+    d13C_totet_n<-data$d13C_totet_n[i]
+    conc_totet_AVE<-data$conc_totet_AVE[i]
+    conc_totet_SD<-data$conc_totet_SD[i]
+    d13C_bget_AVE<-data$d13C_bget_AVE[i]
+    d13C_bget_SD<-data$d13C_bget_SD[i]
+    d13C_bget_n<-data$d13C_totet_n[i]
+
+    if((d13C_totet_n)==1){ld13C_totet<-rep(d13C_totet_AVE,n)}
+    else{ld13C_totet<-rnorm(n, d13C_totet_AVE, d13C_totet_SD)}
+    
+    if((d13C_bget_n)==1){ld13C_bget<-rep(d13C_bget_AVE,n)}
+    else{ld13C_bget<-rnorm(n, d13C_bget_AVE, d13C_bget_SD)}
+    
+    lconc_totet<-rnorm(n, conc_totet_AVE, conc_totet_SD)
+    
+    
+    ID<-row.names(data)[i]
+    MC<-percV_uncertainty(n, ID, le_Mo, le_V, ld13C_acetylene, lconc_totet, ld13C_totet, lconc_bget, ld13C_bget)
+    
+    MC_AVE<-MC[1]
+    MC_SD<-MC[2]
+    
+    data[i,((y+1):(y+2))]<-MC
+    
+    print(c(i, ID, 'among', x))
+  }
+  colnames(data)[((y+1):(y+2))]<-c("MC_AVE","MC_SD")
+
+  write.table(data, file='/output.txt', sep="\t", col.names=NA)
+  
+  iteration=n^7
+  print(c("total iteration per sample:",iteration))
+  
+  return(data)
+}
+
+```
+
+
+
+
+## Function 3. figure
+
+This function draws the plots of an input value distribution to confirm that they are normally distributed.
+
+```{r}
+figures<-function(n, conc_totet, ld13C_totet, lconc_bget, ld13C_bget, ld13C_bnf, le_Mo, le_V, ld13C_acetylene, ID){
+  
+  par(mfrow=c(2,2), oma=c(1,1,3,1), mar=c(4,6,0,0))
+  hist(lconc_bget, main=NA, xlab=expression(x[bget]), cex.lab=1.5); lines(density(lconc_bget), col="red")
+  hist(ld13C_acetylene, main=NA, xlab=expression(delta^13*C[acetylene*' '*est]), cex.lab=1.5); lines(density(ld13C_acetylene), col="red")
+  hist(le_Mo, main=NA, xlab=expression(''^13*epsilon[Mo*' '*est]), cex.lab=1.5);  lines(density(le_Mo), col="red")
+  hist(le_V, main=NA, xlab=expression(''^13*epsilon[V*' '*est]), cex.lab=1.5); lines(density(le_V), col="red")
+  return()
+}
+```
+
+
+
+
+## Prompt for a user
+
+A user will see this prompt on their R studio when they compile this R file. They can follow the questions here to obtain %V-nitrogenase values.
+
+```{r pressure, echo=FALSE}
+cat("\n\n\n")
+cat("\U1F98A\U1F98A\U1F98A Welcome to ISARA Uncertainty Calculation. Please enter a semicolon if you do not want to proceed. \U1F98A\U1F98A\U1F98A\n\n\n")
+wd<-readline(prompt="Q1. Where is your working directory? (EX.~/Desktop/):   ")
+setwd(wd)
+cat("\nYou should have your sample information as input_sample.txt in this directory. The input file should have five columns:\n\tID_SAMPLE, \n\tconc_totet, \n\td13C_totet_AVE, \n\td13C_totet_SD, and \n\td13C_totet_n.\n\n\n")
+n<-readline(prompt="Q2. How many random numbers do you need for each parameter? (EX. 30):   ")
+n<-as.integer(n)
+cat("\n\n")
+rand_exist<-readline("Q3. Do you already have a set of the random numbers for the parameters in the above-entered directory as input_rand.txt? Yes/No:   ")
+multiple_uncertainty(n, rand_exist)
+cat("\n\U1F98A\U1F98A\U1F98A The result is in output.txt. The histograms of the input parameters in the right window help you check normality.  Good luck! \U1F98A\U1F98A\U1F98A\n\n\n")
+```
+
+End of Document
+
+
+
